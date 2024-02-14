@@ -92,6 +92,24 @@ bool SolverSQP::solve(const std::vector<Eigen::VectorXd>& init_xs, const std::ve
   }
   
   bool recalcDiff = true;
+  std::cout << "Callback before I start" << std::endl;
+
+  tryStep(0.);
+
+  std::cout << "gap norm " << std::endl;
+  const std::size_t T = problem_->get_T();
+  for (std::size_t t = 0; t < T; ++t) {
+    gap_norm_ += fs_[t].lpNorm<1>();   
+    std::cout << "t " << t << " fs_[t] " << fs_[t].lpNorm<1>() << std::endl;
+  }
+  gap_norm_ += fs_.back().lpNorm<1>();   
+  std::cout << "gap norm " << gap_norm_ << std::endl;
+
+
+
+  computeDirection(true);
+  checkKKTConditions();
+  printCallbacks();
   for (iter_ = 0; iter_ < maxiter; ++iter_) {
 
     recalcDiff = true;
@@ -136,6 +154,7 @@ bool SolverSQP::solve(const std::vector<Eigen::VectorXd>& init_xs, const std::ve
       }
       // Filter line search criteria 
       // Equivalent to heuristic cost_ > cost_try_ || gap_norm_ > gap_norm_try_ when filter_size=1
+      std::cout << "use_filter_line_search_ " << use_filter_line_search_ << std::endl;
       if(use_filter_line_search_){
         is_worse_than_memory_ = false;
         std::size_t count = 0.; 
@@ -144,6 +163,7 @@ bool SolverSQP::solve(const std::vector<Eigen::VectorXd>& init_xs, const std::ve
           count++;
         }
         if( is_worse_than_memory_ == false ) {
+          std::cout << "accepting step" << std::endl;
           setCandidate(xs_try_, us_try_, false);
           recalcDiff = true;
           break;
@@ -152,6 +172,8 @@ bool SolverSQP::solve(const std::vector<Eigen::VectorXd>& init_xs, const std::ve
       // Line-search criteria using merit function
       else{
         if (merit_ > merit_try_) {
+          std::cout << "merit_ " << merit_ << " merit_try_ " << merit_try_ << std::endl;
+          std::cout << "accepting step" << std::endl;
           setCandidate(xs_try_, us_try_, false);
           recalcDiff = true;
           break;
@@ -162,13 +184,25 @@ bool SolverSQP::solve(const std::vector<Eigen::VectorXd>& init_xs, const std::ve
     if (steplength_ > th_stepdec_) {
       decreaseRegularization();
     }
-    if (steplength_ <= th_stepinc_) {
+    // if (steplength_ <= th_stepinc_) {
+    //   increaseRegularization();
+    //   if (preg_ == reg_max_) {
+    //     STOP_PROFILER("SolverSQP::solve");
+    //     std::cout << "returning false " << preg_ << " "" << reg_max_ " << std::endl;
+    //     return false;
+    //   }
+    // }
+
+    if (steplength_ <= th_stepinc_ && preg_ <= reg_max_) {
       increaseRegularization();
-      if (preg_ == reg_max_) {
-        STOP_PROFILER("SolverSQP::solve");
-        return false;
-      }
+      // if (preg_ == reg_max_) {
+      //   STOP_PROFILER("SolverSQP::solve");
+      //   std::cout << "returning false " << preg_ << " "" << reg_max_ " << std::endl;
+      //   return false;
+      // }
     }
+
+
 
     if(with_callbacks_){
       printCallbacks();
@@ -219,15 +253,25 @@ void SolverSQP::computeDirection(const bool recalcDiff){
   }
   gap_norm_ = 0;
   const std::size_t T = problem_->get_T();
+  // std::cout << "comututing gap norm " << std::endl;
   for (std::size_t t = 0; t < T; ++t) {
     gap_norm_ += fs_[t].lpNorm<1>();   
+    // std::cout << "t " << t << " fs_[t] " << fs_[t].lpNorm<1>() << std::endl;
+    // std::cout << "accumulated gap norm " << gap_norm_ << std::endl;
   }
+  // std::cout << "gap norm " << gap_norm_ << std::endl;
   gap_norm_ += fs_.back().lpNorm<1>();   
 
   merit_ = cost_ + mu_*gap_norm_;
+  std::cout << "merit_ " << merit_ << std::endl;
 
   backwardPass();
   forwardPass();
+
+  
+
+
+
 
   STOP_PROFILER("SolverSQP::computeDirection");
 
@@ -285,6 +329,10 @@ void SolverSQP::forwardPass(){
     x_grad_norm_ += dx_.back().lpNorm<1>(); // assuming that there is no gap in the initial state
     x_grad_norm_ = x_grad_norm_/(double)(T+1);
     u_grad_norm_ = u_grad_norm_/(double)T; 
+
+    std::cout << "x_grad_norm_ after div T " << x_grad_norm_ << std::endl;
+    std::cout << "u_grad_norm_ after div T " << u_grad_norm_ << std::endl;
+
     STOP_PROFILER("SolverSQP::forwardPass");
 
 }
@@ -320,6 +368,7 @@ double SolverSQP::tryStep(const double steplength) {
         if (t > 0){
           const boost::shared_ptr<ActionDataAbstract>& d_prev = datas[t-1];
           m->get_state()->diff(xs_try_[t], d_prev->xnext, fs_try_[t-1]);
+          // std::cout << "t " << t << " fs_try_[t-1] " << fs_try_[t-1].lpNorm<1>() << std::endl;
           gap_norm_try_ += fs_try_[t-1].lpNorm<1>(); 
         } 
 
@@ -350,6 +399,8 @@ double SolverSQP::tryStep(const double steplength) {
     }
 
     STOP_PROFILER("SolverSQP::tryStep");
+
+  std::cout << "merit_try " << merit_try_ << std::endl;
 
     return merit_try_;
 }
