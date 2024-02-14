@@ -1,3 +1,6 @@
+
+Quim's fork of mim solvers to play around!
+
 # mim_solvers
 Implementation of efficient numerical optimal control solvers. 
 In particular, the Sequential Quadratic Programming (SQP) solver described in [this paper](https://laas.hal.science/hal-04330251) solves nonlinear constrained OCPs efficiently by leveraging sparsity.
